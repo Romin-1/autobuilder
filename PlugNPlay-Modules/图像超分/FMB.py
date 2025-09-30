@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# 论文：SMFANet: A Lightweight Self-Modulation Feature Aggregation Network for Efficient Image Super-Resolution( ECCV 2024 )
-# 论文地址：https://openaccess.thecvf.com/content/CVPR2024W/NTIRE/papers/Ren_The_Ninth_NTIRE_2024_Efficient_Super-Resolution_Challenge_Report_CVPRW_2024_paper.pdf
+#论文：SMFANet: A Lightweight Self-Modulation Feature Aggregation Network for Efficient Image Super-Resolution( ECCV 2024 )
+#论文地址：https://openaccess.thecvf.com/content/CVPR2024W/NTIRE/papers/Ren_The_Ninth_NTIRE_2024_Efficient_Super-Resolution_Challenge_Report_CVPRW_2024_paper.pdf
 
 class DMlp(nn.Module):
     def __init__(self, dim, growth_rate=2.0):
@@ -91,15 +91,15 @@ class FMB(nn.Module):
 
 
 if __name__ == '__main__':
-    input_shape = (1, 36, 64, 64)
+
+    input_shape = (1, 36, 64, 64)# B C H W
+
+
     input = torch.randn(input_shape)
 
-    # 实例化FMB类
     block = FMB(dim=36)
 
-    # 将输入张量传入FMB实例
     output = block(input)
 
-    # 打印输入和输出的形状
-    print(input.size())
-    print(output.size())
+    print(input.shape)
+    print(output.shape)

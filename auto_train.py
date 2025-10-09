@@ -21,6 +21,28 @@ def parse_args(argv: Any = None) -> argparse.Namespace:
     parser.add_argument("--num-classes", type=int, default=2, help="Number of foreground classes in synthetic data.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for data generation.")
     parser.add_argument(
+        "--module-root",
+        default="PlugNPlay-Modules/目标检测",
+        help="Directory containing task-specific PlugNPlay modules to sample.",
+    )
+    parser.add_argument(
+        "--min-modules",
+        type=int,
+        default=1,
+        help="Minimum number of modules to chain together when building the model.",
+    )
+    parser.add_argument(
+        "--max-modules",
+        type=int,
+        default=3,
+        help="Maximum number of modules to chain together when building the model.",
+    )
+    parser.add_argument(
+        "--module-seed",
+        type=int,
+        help="Optional seed controlling random module selection (defaults to --seed).",
+    )
+    parser.add_argument(
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Torch device to run on (default automatically chooses CUDA when available).",
@@ -32,6 +54,11 @@ def main(argv: Any = None) -> None:
     args = parse_args(argv)
     args.device = torch.device(args.device)
     trainer = build_trainer(args)
+    if getattr(trainer, "selected_module_names", None):
+        modules = ", ".join(trainer.selected_module_names)
+    else:
+        modules = "<none>"
+    print(f"Selected modules: {modules}")
     stats = trainer.run()
 
     print(

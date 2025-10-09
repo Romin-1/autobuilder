@@ -18,6 +18,7 @@ from torchvision.models.detection import FasterRCNN
 
 from .datasets import SyntheticDetectionDataset, detection_collate_fn
 from .module_loader import load_instance
+from .module_sampling import RandomModulePipeline, sample_random_pipeline
 
 
 @dataclass
@@ -44,14 +45,16 @@ class ObjectDetectionTrainer(TaskTrainer):
         target_loss: float,
         max_epochs: int,
         device: torch.device,
+        module_pipeline: RandomModulePipeline,
     ) -> None:
         self.device = device
         self.dataset = dataset
         self.batch_size = batch_size
         self.target_loss = target_loss
         self.max_epochs = max_epochs
+        self.selected_module_names = list(module_pipeline.module_names)
 
-        self.model = self._build_model(dataset).to(device)
+        self.model = self._build_model(dataset, module_pipeline).to(device)
         self.optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
         self.scheduler = StepLR(self.optimizer, step_size=5, gamma=0.5)
 
@@ -74,7 +77,11 @@ class ObjectDetectionTrainer(TaskTrainer):
             collate_fn=detection_collate_fn,
         )
 
-    def _build_model(self, dataset: SyntheticDetectionDataset) -> FasterRCNN:
+    def _build_model(
+        self,
+        dataset: SyntheticDetectionDataset,
+        module_pipeline: RandomModulePipeline,
+    ) -> FasterRCNN:
         afpn_path = Path("PlugNPlay-Modules/目标检测/AFPN.py")
         afpn = load_instance(afpn_path, "AFPN", in_channels=[256, 512, 1024, 2048], out_channels=256)
 
@@ -84,7 +91,7 @@ class ObjectDetectionTrainer(TaskTrainer):
         layer1, layer2, layer3, layer4 = modules[4:8]
 
         class BackboneWithAFPN(nn.Module):
-            def __init__(self) -> None:
+            def __init__(self, pipeline: RandomModulePipeline) -> None:
                 super().__init__()
                 self.stem = stem
                 self.layer1 = layer1
@@ -92,6 +99,7 @@ class ObjectDetectionTrainer(TaskTrainer):
                 self.layer3 = layer3
                 self.layer4 = layer4
                 self.fpn = afpn
+                self.pipeline = pipeline
                 self.out_channels = 256
 
             def forward(self, x: torch.Tensor) -> OrderedDict[str, torch.Tensor]:
@@ -101,7 +109,13 @@ class ObjectDetectionTrainer(TaskTrainer):
                 c4 = self.layer3(c3)
                 c5 = self.layer4(c4)
 
-                p2, p3, p4, p5 = self.fpn([c2, c3, c4, c5])
+                pyramid = self.fpn([c2, c3, c4, c5])
+                pyramid = self.pipeline(list(pyramid))
+                if len(pyramid) != 4:
+                    raise ValueError(
+                        "Module pipeline must return four feature maps matching the FPN pyramid."
+                    )
+                p2, p3, p4, p5 = pyramid
                 return OrderedDict({
                     "p2": p2,
                     "p3": p3,
@@ -109,7 +123,7 @@ class ObjectDetectionTrainer(TaskTrainer):
                     "p5": p5,
                 })
 
-        backbone = BackboneWithAFPN()
+        backbone = BackboneWithAFPN(module_pipeline)
         num_classes = dataset.num_classes + 1  # background + objects
         model = FasterRCNN(backbone, num_classes=num_classes)
         return model
@@ -170,6 +184,16 @@ def build_trainer(args: argparse.Namespace) -> TaskTrainer:
         raise KeyError(f"Unsupported task '{task}'. Available: {sorted(TASK_REGISTRY)}")
 
     if task == "object_detection":
+        module_root = Path(args.module_root)
+        module_seed = getattr(args, "module_seed", None)
+        if module_seed is None:
+            module_seed = args.seed
+        pipeline, _ = sample_random_pipeline(
+            module_root,
+            min_count=args.min_modules,
+            max_count=args.max_modules,
+            seed=module_seed,
+        )
         dataset = SyntheticDetectionDataset(
             num_samples=args.num_samples,
             image_size=args.image_size,
@@ -182,6 +206,7 @@ def build_trainer(args: argparse.Namespace) -> TaskTrainer:
             target_loss=args.target_loss,
             max_epochs=args.max_epochs,
             device=args.device,
+            module_pipeline=pipeline,
         )
 
     raise AssertionError("Unhandled task registration")

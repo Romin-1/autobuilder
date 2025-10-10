@@ -45,16 +45,31 @@ class ObjectDetectionTrainer(TaskTrainer):
         target_loss: float,
         max_epochs: int,
         device: torch.device,
-        module_pipeline: RandomModulePipeline,
+        *,
+        module_root: Path,
+        min_modules: int,
+        max_modules: int,
+        module_seed: int | None = None,
     ) -> None:
         self.device = device
         self.dataset = dataset
         self.batch_size = batch_size
         self.target_loss = target_loss
         self.max_epochs = max_epochs
-        self.selected_module_names = list(module_pipeline.module_names)
 
-        self.model = self._build_model(dataset, module_pipeline).to(device)
+        if module_seed is None:
+            module_seed = 0
+
+        pipeline, names = sample_random_pipeline(
+            module_root,
+            min_count=min_modules,
+            max_count=max_modules,
+            seed=module_seed,
+        )
+        self.selected_module_names = list(names)
+        self.module_pipeline = pipeline
+
+        self.model = self._build_model(dataset, pipeline).to(device)
         self.optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
         self.scheduler = StepLR(self.optimizer, step_size=5, gamma=0.5)
 
@@ -188,12 +203,6 @@ def build_trainer(args: argparse.Namespace) -> TaskTrainer:
         module_seed = getattr(args, "module_seed", None)
         if module_seed is None:
             module_seed = args.seed
-        pipeline, _ = sample_random_pipeline(
-            module_root,
-            min_count=args.min_modules,
-            max_count=args.max_modules,
-            seed=module_seed,
-        )
         dataset = SyntheticDetectionDataset(
             num_samples=args.num_samples,
             image_size=args.image_size,
@@ -206,7 +215,10 @@ def build_trainer(args: argparse.Namespace) -> TaskTrainer:
             target_loss=args.target_loss,
             max_epochs=args.max_epochs,
             device=args.device,
-            module_pipeline=pipeline,
+            module_root=module_root,
+            min_modules=args.min_modules,
+            max_modules=args.max_modules,
+            module_seed=module_seed,
         )
 
     raise AssertionError("Unhandled task registration")

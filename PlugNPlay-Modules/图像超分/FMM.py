@@ -97,9 +97,12 @@ class FMM(nn.Module):
         return x
 
 if __name__ == '__main__':
-    dim = 64
-    block = FMM(dim)
-    input = torch.randn(1, dim, 32, 32)
+
+
+    block = FMM(64)
+
+    input = torch.randn(1, 64, 32, 32)
+
     output = block(input)
 
     # 打印输入和输出的形状

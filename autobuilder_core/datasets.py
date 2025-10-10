@@ -46,7 +46,9 @@ class SyntheticDetectionDataset(Dataset[DetectionSample]):
         return self._num_samples
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        rng = np.random.RandomState(self._rng.randint(0, 2**32 - 1) + index)
+        max_int32 = np.iinfo(np.int32).max
+        seed_value = int(self._rng.randint(0, max_int32))
+        rng = np.random.RandomState(seed_value + index)
         image = np.zeros((3, self._image_size, self._image_size), dtype=np.float32)
 
         size = rng.randint(self._image_size // 8, self._image_size // 3)
